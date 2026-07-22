@@ -120,14 +120,6 @@ have a single-stepper.
 | `32 40 00 ff` | `mov #0xff00, sr`  | `sr = 0xff00`: bit 15 = request, bits 8–14 = `0x7f` |
 | `b0 12 10 00` | `call #0x10`       | hit the gate with `sr` already set → **INT 0x7F → unlock** |
 
-The thing that took me embarrassingly long to internalize: **`mov #0xff00, sr ;
-call #0x10` is the entire interrupt, self-contained.** No `push`, no `swpb`, no
-reading `2(sp)`, no trampoline. The whole `push #0x7e ; call #0x45fc` dance in the
-real code exists to pass an *arbitrary* interrupt number as an argument. When you
-already know the number at write-time, you skip all of it and bake `0xff00` right
-into the `mov`. `mov` also touches no flags, so the value survives clean into the
-`call`.
-
 Every wall I spent three days hitting was a wall around *reusing the trampoline*.
 The moment I could write raw bytes, I didn't need the trampoline at all.
 
