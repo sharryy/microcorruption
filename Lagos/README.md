@@ -196,6 +196,41 @@ clear. So one approach builds the value in a scratch register (`r4`/`r5`) step b
 step — keeping each intermediate's low byte `0x00`, or at least CPUOFF off — and only
 then tries to move it into `sr` (where the `mov.b` and no-store walls finish it off).
 
+### The first instinct: reuse the routine's own `call #0x45fc`
+
+The overflow doesn't only smash the stack — it lets me overwrite live code, and the
+routine it lands in is `conditional_unlock_door`. So the first thing I reached for
+wasn't writing a fresh interrupt; it was reusing the `call #0x45fc` the routine
+*already* makes, and just feeding it what it needs:
+
+```
+4452: mov #0xfffc, r14
+4456: add r4, r14      ; r14 = r4 - 4
+4458: push r14
+445a: push r15
+445c: push #0x7e       ; the interrupt number, hard-coded
+4460: call #0x45fc
+```
+
+I built `0x7f` out of legal bytes with the tool, dropped it in `r4` (any of `r1`–`r9`
+works — I used `r4`), and figured the routine's own `add r4, r14` would carry it in
+for me. It doesn't: the number the trampoline reads is the literal `push #0x7e`, not
+anything in `r14`. And the moment I let the routine run to the call, it had already
+executed that push — the wrong number was locked in and everything after it was
+poisoned.
+
+That's the vise. Keeping the `add`/`push`/`call` sequence working means leaving the
+code intact — which keeps the `push #0x7e`. But I can't skip the routine and load the
+number myself either: `r10`–`r15` all encode with a non-alphanumeric low byte
+(`0x3a`–`0x3f`), so `add #imm, r14` isn't even a legal instruction, and `0x45fc` takes
+its number from `2(sp)` — back to controlling `sp` to an exact slot, hard on its own.
+
+I did try to cut the poison out: overwrite `push #0x7e` with something inert — `6666`
+(`addc @r6, r6`) is alphanumeric and harmless enough — so the routine would fall
+straight through to the call. It never came together, and clobbering the code *before*
+the call just recreates the problem: you wipe `add r4, r14` too, and now nothing sets
+up the arguments at all. Dead end.
+
 Here's the graveyard, each attempt tied to the wall it hit.
 
 ### Attempt A — build the number in a register, then pivot SP toward `0x2400`
