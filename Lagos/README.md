@@ -269,18 +269,4 @@ constraint."
 
 ## Lessons (the transferable bits)
 
-- **A filter is a property of one code path, not of the program.** Before you try
-  to defeat a constraint on your input, look for a second input through a path that
-  doesn't have the constraint. It almost always exists, and it's almost always
-  easier than beating the filter head-on.
-- **`mov #0xff00, sr ; call #0x10` is the whole interrupt, stack-free.** When you
-  know the number at write-time you never need the trampoline, the `swpb`, or the
-  stack read. Bake it into the `mov`.
-- **Observe, don't predict.** I could've hand-computed where the second input
-  lands and set up `getsn`'s r14/r15 like the other writeups do. I just ran it and
-  watched the debugger. With a single-stepper in hand, looking is cheaper than
-  reasoning.
-- **A good tool can keep you in a bad approach.** The alphanumeric-shellcode tool
-  made the hard path feel viable day after day, so I never stepped back to ask if
-  the path was necessary. Sometimes the fix isn't a better tool — it's dropping the
-  frame the tool was built for.
+- **Observe, don't predict.** With a single-stepper in hand, looking is cheaper than reasoning — I watched where the second input landed instead of computing it.
