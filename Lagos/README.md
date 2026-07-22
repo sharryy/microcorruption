@@ -97,17 +97,20 @@ program — just of one code path.
 |-------------------|----------|------|
 | `61` × 17 (`a`)   | padding  | fills the buffer up to the saved return address (the lone leading `61` is there to eat the filter's duplicate-first-byte quirk) |
 | `54 46`           | `0x4654` | new return address → re-enter `getsn` past its pushes = the unfiltered second read |
-| `30 44` × 5       | `0x4430` | doubles as `getsn`'s **buffer** argument (second input lands at `0x4430`) **and** the address its `ret` pops → `PC = 0x4430` |
+| `30 44` × 5       | `0x4430` | sprayed 5× so it lands in **both** slots that matter — `getsn`'s **buffer** arg (second input writes to `0x4430`) **and** the word its `ret` pops → `PC = 0x4430` — without pinning exact offsets |
 
 Flow: `login` returns to `0x4654` → `getsn` reads a second input straight to
 `0x4430` → its tail `add #0x6, sp ; ret` pops `0x4430` → we jump into the bytes we
 just wrote.
 
 `0x4430` is just a spot in code I can name with alphanumeric bytes and that's safe
-to clobber. Honestly I didn't even compute where it'd land in the clever way the
-other writeups do — I just ran it, watched in the debugger where the second input
-got written, and pointed the return there. Observation beats prediction when you
-have a single-stepper.
+to clobber. Repeating it five times is deliberate **spray**: instead of computing
+the exact offset of the buffer arg vs. the return slot and trying to land each one
+precisely, I splatter `0x4430` across five words so it's already sitting in whichever
+slot gets used. Spraying the value across the landing zone brute-forces the placement
+in one shot — no per-offset arithmetic, no second attempt. (I didn't compute where
+the second input lands either; I ran it, watched the debugger, and pointed the return
+there. Observation beats prediction when you have a single-stepper.)
 
 ### Second input (unfiltered — anything goes)
 
