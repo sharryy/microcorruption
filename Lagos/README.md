@@ -149,6 +149,50 @@ beautifully engineered shovel and used it to dig for three days.
 > The tool (separate repo, appropriately named): **AGI** — it filters MSP430
 > opcodes. [link](https://github.com/sharryy/agi)
 
+### What's encodable, and what's dead
+
+Everything below fights the same instruction-format fact. A double-operand MSP430
+instruction is one 16-bit word:
+
+```
+ 15    12 11    8  7    6    5   4  3    0
++--------+-------+----+----+------+------+
+| opcode |  src  | Ad | BW |  As  | dst  |
++--------+-------+----+----+------+------+
+```
+
+For `op #imm, rD` (immediate source, register dest) the word splits into two
+independent bytes:
+
+- **high byte = `opcode << 4`** → which *operation* is legal
+- **low byte = `0x30 | dst`** (As=3, Ad=0) → which *register* is legal
+
+**Dead ops.** The high byte must be alphanumeric and almost none are: only `add`
+(`0x50` = `'P'`) survives — `mov` (`0x40`), `sub` (`0x80`), `xor` (`0xE0`), `and`
+(`0xF0`), `bis`/`bic` (`0xD0`/`0xC0`) are all out. Every single-operand op (`push`,
+`call`, `swpb`, …) is Format II with a `0x10-0x13` high byte — dead too. So the only
+arithmetic I get is `add #imm`.
+
+**Dead registers.** `0x30 | dst` gives `0x31`–`0x39` for `r1`–`r9` (fine), but
+`r10`–`r15` give `0x3a`–`0x3f` = `:;<=>?` — not alphanumeric. Only `r1`–`r9`.
+
+**Writing to memory is dead.** A memory destination needs `Ad = 1`, and that bit is
+bit 7 of the low byte — so the low byte goes `≥ 0x80`, past the alphanumeric ceiling
+`0x7a`, every time. No store encodes. With `push` also dead, a value I compute in a
+register can never reach memory. That one fact kills half the attempts below.
+
+**`mov.b` works but is lossy.** Byte-mode register moves encode, but byte mode zeroes
+the destination's high byte — I can move a low byte, never assemble a full 16-bit
+value like `0xff00`.
+
+**`sr` is writable but radioactive.** `sr` is `r2`, so `add #imm, sr` encodes (`0x32`
+= `'2'`). But it's the status register, and bit 4 is **CPUOFF** — set it and the
+emulator halts instantly. Since `add` can't reach `0xff00` in one legal step, I have
+to build it across several `add`s with *every intermediate value* keeping CPUOFF
+clear. So one approach builds the value in a scratch register (`r4`/`r5`) step by
+step — keeping each intermediate's low byte `0x00`, or at least CPUOFF off — and only
+then tries to move it into `sr` (where the `mov.b` and no-store walls finish it off).
+
 Here's the graveyard, each attempt tied to the wall it hit.
 
 ### Attempt A — build the number in a register, then pivot SP toward `0x2400`
@@ -269,4 +313,9 @@ constraint."
 
 ## Lessons (the transferable bits)
 
-- **Observe, don't predict.** With a single-stepper in hand, looking is cheaper than reasoning — I watched where the second input landed instead of computing it.
+- **A good tool can keep you in a bad approach** just by always having another option to try — mine handed me a fresh set of legal gadgets every day, so I never stopped to question whether the whole approach was the problem.
+
+Most writeups for this level dance with the stack, `r14`, `push` chains, and
+re-deriving the trampoline's argument. You don't need any of it: `mov #0xff00, sr ;
+call #0x10` bakes the entire interrupt into two instructions and you move on — no
+push, no stack arithmetic, no trampoline.
