@@ -151,24 +151,7 @@ beautifully engineered shovel and used it to dig for three days.
 
 Here's the graveyard, each attempt tied to the wall it hit.
 
-### Attempt A — load SR directly from an existing `0xffXX` word in memory
-
-Idea: skip `swpb` entirely by finding a word already equal to `0xff00`-ish in the
-image and loading it straight into `sr`.
-
-```
-61 6161 6161 6161 6161 6161 6161 6161 6161 4644 6162 6666 ... 6666 3450 3646 6666 ... 3244
-```
-
-- `add #0x4636, r4` → `r4 = 0x4636`
-- `mov @r4+, sr` → `sr = word@0x4636 = 0xfffc` (the immediate from `mov #0xfffc,
-  r15` in `getchar`); high byte `0xff` = int `0x7f` + request bit
-
-**Wall:** the snippet ends *at* the `mov`. There's no `call #0x10` or jump to the
-gate after it, so it loads `sr` correctly and then just... stops. And I couldn't
-cleanly reach the gate afterward without hitting an illegal address.
-
-### Attempt B — build the number in a register, then pivot SP toward `0x2400`
+### Attempt A — build the number in a register, then pivot SP toward `0x2400`
 
 Idea: build `0x7f` in a register, move the stack pointer down to the raw input
 buffer at `0x2400`, and run unrestricted shellcode I'd parked there.
@@ -185,7 +168,7 @@ buffer at `0x2400`, and run unrestricted shellcode I'd parked there.
 get control. My parked shellcode was gone before execution reached it. (This is the
 "remember this one" from way up top.)
 
-### Attempt C — build SR with add-chains, jump through a *found* trampoline pointer
+### Attempt B — build SR with add-chains, jump through a *found* trampoline pointer
 
 Idea: build `0xff00` in `sr` by hand with three `add`s, then transfer control to
 the trampoline.
@@ -229,7 +212,7 @@ r15, sr`), and those addresses have illegal bytes (`0x08`, `0x0c`) — and unlik
 `0x45fc`, no word in memory happened to hold *those* values at a typeable address,
 so the found-pointer trick couldn't rescue it either.
 
-### Attempt D — flip the pushed `0x7e` to `0x7f` in place
+### Attempt C — flip the pushed `0x7e` to `0x7f` in place
 
 Idea: I'm overwriting code anyway, so overwrite `conditional_unlock_door`'s `push
 #0x7e` (`0x445c`) so it pushes `0x7f` instead, then let the existing trampoline
@@ -239,7 +222,7 @@ fire it.
 And the operand isn't reachable by arithmetic-at-runtime either without a
 memory-write instruction — which brings us to:
 
-### Attempt E — just write `0x7f` to the stack slot the trampoline reads
+### Attempt D — just write `0x7f` to the stack slot the trampoline reads
 
 Idea: forget building `sr`; the trampoline reads `2(sp)`, so put `0x007f` there.
 
@@ -254,7 +237,7 @@ the number has to reach either the stack (can't write memory) or `sr` via the
 trampoline (which overwrites it) or `sr` directly (can't jump to the gate). Every
 road out is blocked. The constraint isn't "hard," it's closed.
 
-### Attempt F — point `2(sp)` at an existing `0x7f`/`0xff` byte
+### Attempt E — point `2(sp)` at an existing `0x7f`/`0xff` byte
 
 Idea: if I can't *write* `0x7f`, maybe one already exists in the image and I can
 slide `sp` so `2(sp)` lands on it.
@@ -268,7 +251,7 @@ an arbitrary spot precisely anyway (the `add`-to-`sp` gadgets are coarse).
 
 ## What actually unstuck it
 
-All six of those die for the same underlying reason: I was trying to **defeat the
+All five of those die for the same underlying reason: I was trying to **defeat the
 alphanumeric filter** — smuggle an illegal value past it, or reconstruct the unlock
 out of legal pieces. And the filter is genuinely, provably airtight against that on
 a single input.
